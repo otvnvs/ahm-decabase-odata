@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@otvnvs/ahm-decabase-odata": "file:..",
-    "vue": "^3.5.40"
+    "vue": "^3.5.40",
+    "vue-router": "^4.6.4"
   }
 }

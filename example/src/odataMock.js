@@ -6,6 +6,8 @@
 // Swap to a live service by replacing `transport` in App.vue with a FetchTransport
 // and pointing baseUrl at your OData v4 endpoint.
 
+import { seedWorkflowItems } from './data/workflowMock.js';
+
 const BOOKS = [
   { ID: 1, Title: 'Programming the SAP Web Application Server', Author: 'Karl Kessler', Stock: 3, Price: 49.9, Genre: 'Technical' },
   { ID: 2, Title: 'OData - The Best Way to REST', Author: 'Ralf Handl', Stock: 0, Genre: 'Technical' },
@@ -137,6 +139,8 @@ export class MockTransport {
     this.data = [...BOOKS];
     this.nextId = this.data.length + 1;
     this.lastRequest = null;
+    this.workflow = seedWorkflowItems();
+    this.nextWorkflowId = this.workflow.length + 1;
   }
 
   async request({ url, method = 'GET', body }) {
@@ -147,6 +151,46 @@ export class MockTransport {
 
     this.lastRequest = { method, path, query: Object.fromEntries(q.entries()) };
 
+    // --- WorkflowItems ---
+    if (path === '/WorkflowItems' && method === 'GET') {
+      return handleWorkflowList(this.workflow, q);
+    }
+    if (path === '/WorkflowItems' && method === 'POST') {
+      const obj = typeof body === 'string' ? JSON.parse(body) : { ...body };
+      obj.ID = this.nextWorkflowId++;
+      this.workflow.push(obj);
+      return jsonResponse(201, obj);
+    }
+    if (path.endsWith('/$count') && path.startsWith('/WorkflowItems')) {
+      const base = path.replace(/\/\$count$/, '');
+      if (base === '/WorkflowItems') {
+        const rows = applyFilter(this.workflow, q.get('$filter'));
+        return jsonResponse(200, String(rows.length), { 'content-type': 'text/plain' });
+      }
+    }
+    {
+      const byKey = path.match(/^\/WorkflowItems\((\d+)\)$/);
+      if (byKey && method === 'GET') {
+        const row = this.workflow.find(w => w.ID === Number(byKey[1]));
+        return row ? jsonResponse(200, row) : jsonResponse(404, { error: { message: 'Workflow item not found' } });
+      }
+      if (byKey && method === 'PATCH') {
+        const row = this.workflow.find(w => w.ID === Number(byKey[1]));
+        if (!row) return jsonResponse(404, { error: { message: 'Workflow item not found' } });
+        const patch = typeof body === 'string' ? JSON.parse(body) : body;
+        Object.assign(row, patch);
+        return jsonResponse(200, row);
+      }
+      const submit = path.match(/^\/WorkflowItems\((\d+)\)\/Submit$/);
+      if (submit && method === 'POST') {
+        const row = this.workflow.find(w => w.ID === Number(submit[1]));
+        if (!row) return jsonResponse(404, { error: { message: 'Workflow item not found' } });
+        row.Status = 'Done';
+        return jsonResponse(200, row);
+      }
+    }
+
+    // --- Books ---
     // GET /Books/$count
     if (path.endsWith('/$count') && method === 'GET') {
       const base = path.replace(/\/\$count$/, '');
@@ -186,4 +230,16 @@ export class MockTransport {
 
     return jsonResponse(404, { error: { message: `No mock route for ${method} ${path}` } });
   }
+}
+
+function handleWorkflowList(data, q) {
+  let rows = applyFilter(data, q.get('$filter'));
+  rows = applyOrderby(rows, q.get('$orderby'));
+  const top = q.get('$top') ? Number(q.get('$top')) : null;
+  const skip = q.get('$skip') ? Number(q.get('$skip')) : 0;
+  const total = rows.length;
+  if (skip) rows = rows.slice(skip);
+  if (top !== null) rows = rows.slice(0, top);
+  rows = applySelect(rows, q.get('$select'));
+  return jsonResponse(200, { value: rows, '@odata.count': total });
 }
