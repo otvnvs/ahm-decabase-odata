@@ -1,3 +1,9 @@
+# AHM-Decabase-OData
+
+AHM OData support library.
+
+## Sample Usage
+
 Configure project:
 
 ```bash
@@ -19,7 +25,7 @@ Configure `package.json`:
 
 Configure `vite.config.js`:
 
-```js
+```javascript
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
@@ -50,7 +56,7 @@ Edit `index.html`
 
 Edit `./src/main.js`
 
-```js
+```javascript
 import { createApp } from 'vue';
 import App from './App.vue';
 
@@ -69,10 +75,19 @@ Edit `./src/App.vue`:
 
 <script setup>
 import { ref } from 'vue';
-// Import your custom function from your GitHub package
 import sayHello from '@your-github-username/my-shareable-package';
-
-// Execute the function and save it to a reactive reference
 const message = ref(sayHello('Developer'));
 </script>
+```
+
+Run the project using the following:
+
+```javascript
+npm run dev
+```
+
+To update to the latest version, run the following
+
+```bash
+npm install git+https://github.com/otvnvs/ahm-decabase-odata.git --force
 ```
