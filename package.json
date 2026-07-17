@@ -1,12 +1,56 @@
 {
   "name": "@otvnvs/ahm-decabase-odata",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Framework-agnostic OData v4/v2 client library with optional SAP and Vue layers.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.js"
+    },
+    "./sap": {
+      "default": "./src/sap/index.js"
+    },
+    "./vue": {
+      "default": "./src/vue/index.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "vue": "^3.3.0"
+  },
+  "peerDependenciesMeta": {
+    "vue": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "happy-dom": "^20.10.6",
+    "vitest": "^1.6.0",
+    "vue": "^3.4.0"
+  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com"
-  }
+    "url": "git+https://github.com/otvnvs/ahm-decabase-odata.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "odata",
+    "odata-v4",
+    "odata-v2",
+    "sap",
+    "gateway",
+    "vue"
+  ]
 }
