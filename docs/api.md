@@ -49,7 +49,7 @@ Query:
 - `filter(spec)` → `$filter`; `spec` is a string or `(b: FilterBuilder) => string`
 - `orderby(...specs)` → `$orderby`; spec is `'Field desc'` or `{ field, desc }`
 - `top(n)`, `skip(n)`
-- `count(enabled = true)` → `$count`
+- `withCount(enabled = true)` → `$count` (inline @odata.count in list responses)
 - `search(term)` → `$search`
 - `set(name, value)` — raw param
 

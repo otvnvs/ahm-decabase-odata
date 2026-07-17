@@ -159,7 +159,7 @@ async function runQuery() {
     q.orderby({ field, desc: dir === 'desc' });
     q.top(top.value);
     if (selectFields.value.trim()) q.select(...selectFields.value.split(',').map(s => s.trim()));
-    result.value = await q.list();
+    result.value = await q.withCount(true).list();
     lastUrl.value = transport.lastRequest
       ? `${transport.lastRequest.method} Books` +
         (transport.lastRequest.query.$filter ? `?$filter=${transport.lastRequest.query.$filter}` : '') +

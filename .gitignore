@@ -8,3 +8,4 @@ coverage/
 !.github/
 !.github/**
 !example/dist
+tmp/

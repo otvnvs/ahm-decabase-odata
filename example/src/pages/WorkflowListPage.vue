@@ -111,7 +111,7 @@ async function load() {
     const [field, dir] = orderby.value.split(' ');
     q.orderby({ field, desc: dir === 'desc' });
     q.top(top.value);
-    result.value = await q.list();
+    result.value = await q.withCount(true).list();
     const lr = transport.lastRequest?.query || {};
     lastUrl.value = 'GET WorkflowItems' +
       (lr.$filter ? `?$filter=${lr.$filter}` : '') +

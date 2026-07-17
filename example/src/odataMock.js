@@ -210,7 +210,9 @@ export class MockTransport {
       if (skip) rows = rows.slice(skip);
       if (top !== null) rows = rows.slice(0, top);
       rows = applySelect(rows, q.get('$select'));
-      return jsonResponse(200, { value: rows, '@odata.count': total });
+      const body = { value: rows };
+      if (q.get('$count') === 'true') body['@odata.count'] = total;
+      return jsonResponse(200, body);
     }
 
     // POST /Books
@@ -241,5 +243,7 @@ function handleWorkflowList(data, q) {
   if (skip) rows = rows.slice(skip);
   if (top !== null) rows = rows.slice(0, top);
   rows = applySelect(rows, q.get('$select'));
-  return jsonResponse(200, { value: rows, '@odata.count': total });
+  const body = { value: rows };
+  if (q.get('$count') === 'true') body['@odata.count'] = total;
+  return jsonResponse(200, body);
 }

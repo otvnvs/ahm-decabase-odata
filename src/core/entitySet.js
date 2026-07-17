@@ -18,7 +18,7 @@ export class EntitySet {
   orderby(...s) { this.query.orderby(...s); return this; }
   top(n) { this.query.top(n); return this; }
   skip(n) { this.query.skip(n); return this; }
-  count(enabled = true) { this.query.count(enabled); return this; }
+  withCount(enabled = true) { this.query.count(enabled); return this; }
   search(term) { this.query.search(term); return this; }
   set(name, value) { this.query.set(name, value); return this; }
 
