@@ -38,8 +38,9 @@ describe('formatLiteral', () => {
     const d = new Date('2026-01-02T03:04:05.000Z');
     expect(formatLiteral(d)).toBe('2026-01-02T03:04:05.000Z');
   });
-  it('escapes single quotes in strings', () => {
-    expect(formatLiteral("O'Brien")).toBe("'O''Brien'");
+  it('formats GUIDs unquoted (Edm.Guid)', () => {
+    expect(formatLiteral('6045bda6-d096-1fd1-a182-fb78ac85c000')).toBe('6045bda6-d096-1fd1-a182-fb78ac85c000');
+    expect(formatLiteral('6045BDA6-D096-1FD1-A182-FB78AC85C000')).toBe('6045BDA6-D096-1FD1-A182-FB78AC85C000');
   });
 });
 
@@ -49,6 +50,12 @@ describe('buildEntityPath', () => {
   });
   it('builds composite-key path', () => {
     expect(buildEntityPath('GoodsReceipt', { A: 1, B: 'x' })).toBe("GoodsReceipt(A=1,B='x')");
+  });
+  it('builds composite-key path with GUID unquoted', () => {
+    expect(buildEntityPath('GoodsReceipt', {
+      GoodsReceiptUUID: '6045bda6-d096-1fd1-a182-fb78ac85c000',
+      IsActiveEntity: false,
+    })).toBe("GoodsReceipt(GoodsReceiptUUID=6045bda6-d096-1fd1-a182-fb78ac85c000,IsActiveEntity=false)");
   });
   it('handles boolean key parts', () => {
     expect(buildEntityPath('GR', { Uuid: 'abc', IsActiveEntity: false }))

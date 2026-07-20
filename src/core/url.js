@@ -21,7 +21,7 @@ export function escapeString(value) {
 
 /**
  * Format a JavaScript value as an OData literal for use in $filter or keys.
- *   strings  -> 'value'
+ *   strings  -> 'value'  (except GUIDs -> unquoted, per Edm.Guid spec)
  *   numbers  -> value
  *   booleans -> true | false
  *   null     -> null
@@ -34,8 +34,11 @@ export function formatLiteral(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'null';
   if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return `(${value.map(formatLiteral).join(',')})`;
+  if (GUID_RE.test(value)) return value;
   return `'${escapeString(value)}'`;
 }
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Build the parenthesized key segment for an entity, e.g.

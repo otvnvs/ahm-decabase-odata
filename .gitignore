@@ -1,3 +1,7 @@
+ahm-asset-api-test/
+ahm-asset-delivery-scanner/
+tmp/
+grap-odata/
 node_modules/
 *.log
 .DS_Store

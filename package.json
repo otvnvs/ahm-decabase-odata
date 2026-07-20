@@ -5,12 +5,15 @@
   "type": "module",
   "exports": {
     ".": {
+      "import": "./src/index.js",
       "default": "./src/index.js"
     },
     "./sap": {
+      "import": "./src/sap/index.js",
       "default": "./src/sap/index.js"
     },
     "./vue": {
+      "import": "./src/vue/index.js",
       "default": "./src/vue/index.js"
     }
   },

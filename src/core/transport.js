@@ -98,7 +98,10 @@ export class BrokerTransport {
       const lowerHeaders = {};
       if (wrapped.headers) {
         for (const [k, v] of Object.entries(wrapped.headers)) lowerHeaders[k.toLowerCase()] = v;
-        if (lowerHeaders['set-cookie']) this.cookies = lowerHeaders['set-cookie'];
+        const setCookie = lowerHeaders['set-cookie'];
+        if (setCookie) {
+          this.cookies = Array.isArray(setCookie) ? setCookie.join(', ') : setCookie;
+        }
       }
 
       const status = wrapped.status ?? 200;
