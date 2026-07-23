@@ -64,10 +64,12 @@
 //  });
 //});
 //--------------------------------------------------------------------------------
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { ODataClient } from '../src/core/client.js';
 import { FetchTransport } from '../src/core/transport.js';
 import { basicAuth } from '../src/sap/auth.js';
+import { OfflineTransportDecorator } from '../src/core/offlineTransport.js';
+
 
 const SERVER_URL = 'http://localhost:4004/odata/v4/test';
 
@@ -261,5 +263,72 @@ describe('Direct CAP Server Integration Suite', () => {
       console.log(`\n🚀 [DEEP INSERT INSPECTION]: Successfully verified relational data graph generation for SKU-DEEP-${uniqueSuffix}`);
     });
   });
+
+  describe('Offline Interception and Synchronisation Replay Simulation', () => {
+
+    it('Executes end-to-end cache tracking, offline trapping, and online sync replay', async () => {
+      try {
+        const liveTransport = new FetchTransport();
+        const offlineDecorator = new OfflineTransportDecorator(liveTransport);
+
+        const adminClient = new ODataClient({
+          baseUrl: SERVER_URL,
+          auth: basicAuth('alice', '123'),
+          transport: offlineDecorator
+        });
+
+        // --- STEP A: SIMULATE ONLINE OPERATION (PRIME THE READ CACHE) ---
+        offlineDecorator.setOnline(true);
+        
+        const initialFetch = await adminClient.entitySet('Products').list();
+        expect(initialFetch.value).toBeInstanceOf(Array);
+        expect(offlineDecorator.cache.size).toBeGreaterThan(0);
+
+        // --- STEP B: SIMULATE OFFLINE TRANSITION (READ CACHE FALLBACK) ---
+        offlineDecorator.setOnline(false);
+
+        const cachedFetch = await adminClient.entitySet('Products').list();
+        expect(cachedFetch.value.length).toBe(initialFetch.value.length);
+
+        // --- STEP C: OFFLINE MUTATION RECORDING (OUTBOX TRAPPING) ---
+        const testX = 9000 + Math.floor(Math.random() * 999);
+        const testY = 9999;
+
+        const offlineResult = await adminClient.entitySet('Data').create({ x: testX, y: testY });
+        
+        expect(offlineResult._offlineQueued).toBe(true);
+        expect(offlineDecorator.outbox).toHaveLength(1);
+        expect(offlineDecorator.outbox[0].method).toBe('POST');
+
+        // --- STEP D: SIMULATE RECONNECTION & SYNC REPLAY ---
+        offlineDecorator.setOnline(true);
+
+        const syncCompleted = await offlineDecorator.synchronizeQueue(adminClient);
+        expect(syncCompleted).toBe(true);
+        expect(offlineDecorator.outbox).toHaveLength(0); 
+
+        // --- STEP E: LIVE DIRECT DATABASE VERIFICATION ---
+        const directVerifyClient = new ODataClient({
+          baseUrl: SERVER_URL,
+          auth: basicAuth('alice', '123'),
+          transport: new FetchTransport() 
+        });
+
+        const backendRows = await directVerifyClient.entitySet('Data').filter(b => b.eq('x', testX)).list();
+        expect(backendRows.value).toHaveLength(1);
+        expect(backendRows.value[0].y).toBe(testY);
+
+        console.log(`\n🎉 [OFFLINE INTEGRATION SUCCESS]: Row x=${testX} processed offline and synced straight to SQLite backend database!`);
+      } catch (rawTestError) {
+        // Force the raw underlying exception name, error message, and stack trace to print to stderr
+        process.stderr.write(`\n❌ [RAW TEST EXCEPTION INTERCEPTED]:\nName: ${rawTestError.name}\nMessage: ${rawTestError.message}\nStack: ${rawTestError.stack}\n`);
+        if (rawTestError.body) process.stderr.write(`Body: ${rawTestError.body}\n`);
+        if (rawTestError.endpoint) process.stderr.write(`Endpoint: ${rawTestError.endpoint}\n`);
+        throw rawTestError;
+      }
+    });
+  });
+
+
 });
 

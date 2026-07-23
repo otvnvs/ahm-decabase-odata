@@ -1,179 +1,168 @@
-import { OfflineIndexedDB } from './offlineStore.js';
+import { toPlainHeaders } from './transport.js';
+
+function debugLog(phase, details) {
+  process.stderr.write(`\n🔍 [OFFLINE DIAGNOSTIC] [${phase}] ${JSON.stringify(details, null, 2)}\n`);
+}
+
+function cleanUrlPath(urlStr) {
+  if (!urlStr) return '';
+  const str = String(urlStr);
+  const idx = str.indexOf('?');
+  return idx === -1 ? str : str.substring(0, idx);
+}
+
+// Formal wrapper structure to prevent the client engine from hitting prototype getter validation issues
+function createClientCompatibleResponse(status, textBody) {
+  const isOk = status >= 200 && status < 300;
+  return {
+    status: status,
+    get ok() { return isOk; }, // Implemented as a getter matching native Response patterns
+    statusText: isOk ? 'OK' : 'Error',
+    headers: {
+      get: (n) => n.toLowerCase() === 'content-type' ? 'application/json' : null
+    },
+    json: async () => JSON.parse(textBody),
+    text: async () => textBody
+  };
+}
 
 export class OfflineTransportDecorator {
-  constructor(innerTransport, options = {}) {
+  constructor(innerTransport) {
     this.innerTransport = innerTransport;
-    this.db = options.db || new OfflineIndexedDB();
-    this.isOnlineOverride = options.isOnlineOverride ?? null;
-    this.onSyncSuccess = options.onSyncSuccess || (() => {});
-    this.onSyncError = options.onSyncError || (() => {});
+    this._isOnline = true;
+    this.outbox = [];
+    this.cache = new Map();
   }
 
-  get isOnline() {
-    if (this.isOnlineOverride !== null) {
-      return typeof this.isOnlineOverride === 'function' 
-        ? this.isOnlineOverride() 
-        : this.isOnlineOverride;
-    }
-    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  setOnline(status) {
+    this._isOnline = !!status;
+    debugLog('STATE_CHANGE', { isOnline: this._isOnline });
   }
 
   async request(config) {
     const method = (config.method || 'GET').toUpperCase();
 
-    if (method === 'GET' || method === 'HEAD') {
-      if (this.isOnline) {
-        try {
+    try {
+      // --- READ PIPELINE (GET / HEAD) ---
+      if (method === 'GET' || method === 'HEAD') {
+        debugLog('INTERCEPT_READ_TRIGGER', { method, url: config.url, isOnline: this._isOnline });
+        
+        if (this._isOnline) {
+          debugLog('READ_LIVE_ROUTING_START', { url: config.url });
           const response = await this.innerTransport.request(config);
+          debugLog('READ_LIVE_ROUTING_END', { url: config.url, status: response.status, ok: response.ok });
+          
           if (response.ok && config.url && !config.url.includes('$metadata')) {
             const rawText = await response.text();
-            await this.db.setCache(config.url, rawText);
-            return {
-              ...response,
-              text: async () => rawText,
-              json: async () => JSON.parse(rawText)
-            };
+            const plainUrlKey = cleanUrlPath(config.url);
+            
+            debugLog('CACHE_WRITE_SAVE', { originalUrl: config.url, calculatedKey: plainUrlKey });
+            this.cache.set(plainUrlKey, rawText);
+            
+            return createClientCompatibleResponse(response.status, rawText);
           }
           return response;
-        } catch (error) {
-          return this._serveFromCache(config.url, error);
+        } else {
+          // --- OFFLINE READ FALLBACK ---
+          const lookupKey = cleanUrlPath(config.url);
+          const cachedData = this.cache.get(lookupKey);
+          
+          debugLog('CACHE_LOOKUP_OFFLINE', { requestedUrl: config.url, matchedKey: lookupKey, hit: cachedData !== undefined });
+          
+          if (cachedData !== undefined) {
+            return createClientCompatibleResponse(200, cachedData);
+          }
+          throw new Error(`Offline Error: No cache entry found for key: ${lookupKey}`);
         }
-      } else {
-        return this._serveFromCache(config.url);
       }
-    }
 
-    if (!this.isOnline) {
-      const entitySet = this._extractEntitySet(config.url);
-      const outboxId = await this.db.pushToOutbox({
-        url: config.url,
+      // --- MUTATION PIPELINE (POST / PATCH / PUT / DELETE) ---
+      if (!this._isOnline) {
+        const plainHeaders = toPlainHeaders(config.headers);
+        debugLog('INTERCEPT_MUTATION_OFFLINE', { method, url: config.url, headers: plainHeaders });
+
+        this.outbox.push({
+          url: config.url,
+          method,
+          body: config.body, 
+          headers: plainHeaders
+        });
+
+        return createClientCompatibleResponse(202, JSON.stringify({ _offlineQueued: true }));
+      }
+
+      debugLog('INTERCEPT_MUTATION_ONLINE', { method, url: config.url });
+      return this.innerTransport.request(config);
+
+    } catch (fatalInterceptionError) {
+      debugLog('CRITICAL_DECORATOR_CRASH', {
         method,
-        body: config.body,
-        entitySet
+        url: config.url,
+        errorMessage: fatalInterceptionError.message
       });
-
-      return {
-        status: 202,
-        ok: true,
-        statusText: 'Accepted (Offline Queued)',
-        headers: { get: () => null },
-        json: async () => ({ id: outboxId, _offlineQueued: true }),
-        text: async () => JSON.stringify({ id: outboxId, _offlineQueued: true })
-      };
-    }
-
-    return this.innerTransport.request(config);
-  }
-
-  async _serveFromCache(url, originalError = null) {
-    const cachedData = await this.db.getCache(url);
-    if (cachedData !== null) {
-      return {
-        status: 200,
-        ok: true,
-        statusText: 'OK (Cached Copy)',
-        headers: { get: (n) => n.toLowerCase() === 'content-type' ? 'application/json' : null },
-        json: async () => JSON.parse(cachedData),
-        text: async () => cachedData
-      };
-    }
-    throw originalError || new Error(`Offline: No cached data found for URI tracking line (${url})`);
-  }
-
-  _extractEntitySet(urlStr) {
-    try {
-      const urlObj = urlStr.split('?')[0];
-      const parts = urlObj.split('/');
-      return parts[parts.length - 1] || 'Unknown';
-    } catch {
-      return 'Unknown';
+      throw fatalInterceptionError;
     }
   }
-
-//  async synchronizeQueue(activeClientInstance = null) {
-//    const queue = await this.db.getOutbox();
-//    if (queue.length === 0) return true;
-//
-//    let totalSuccess = true;
-//
-//    for (const item of queue) {
-//      try {
-//        const config = {
-//          url: item.url,
-//          method: item.method,
-//          body: item.body,
-//          headers: new Headers()
-//        };
-//
-//        if (activeClientInstance && typeof activeClientInstance._applyAuth === 'function') {
-//          activeClientInstance._applyAuth(config.headers);
-//          activeClientInstance._applyDefaultHeaders(config.headers, item.method, item.url);
-//          
-//          if (typeof activeClientInstance._beforeRequest === 'function') {
-//            const wrappedReqConfig = { url: item.url, method: item.method, headers: config.headers, body: item.body };
-//            await activeClientInstance._beforeRequest(wrappedReqConfig);
-//          }
-//        }
-//
-//        const res = await this.innerTransport.request(config);
-//
-//        if (res.ok) {
-//          await this.db.removeFromOutbox(item.id);
-//          this.onSyncSuccess(item);
-//        } else {
-//          totalSuccess = false;
-//          this.onSyncError(item, new Error(`HTTP Error Status: ${res.status}`));
-//        }
-//      } catch (err) {
-//        totalSuccess = false;
-//        this.onSyncError(item, err);
-//      }
-//    }
-//
-//    return totalSuccess;
-//  }
-// src/core/offlineTransport.js
 
   async synchronizeQueue(activeClientInstance = null) {
-    const queue = await this.db.getOutbox();
-    if (queue.length === 0) return true;
+    debugLog('SYNC_START', { outboxLength: this.outbox.length });
+    if (this.outbox.length === 0) return true;
 
-    let totalSuccess = true;
+    const pendingItems = [...this.outbox];
+    this.outbox = [];
 
-    for (const item of queue) {
+    for (const item of pendingItems) {
       try {
-        let response;
-        
-        if (activeClientInstance && typeof activeClientInstance.request === 'function') {
-          // Play back the request through the client instance to capture all OData formatting rules
-          response = await activeClientInstance.request(item.url, {
-            method: item.method,
-            body: item.body
-          });
-        } else {
-          // Fall back to direct transport if no client context is supplied
-          response = await this.innerTransport.request({
-            url: item.url,
-            method: item.method,
-            body: item.body
-          });
+        const nativeHeadersInstance = new Headers();
+        if (item.headers) {
+          for (const [key, val] of Object.entries(item.headers)) {
+            nativeHeadersInstance.set(key, val);
+          }
         }
 
-        if (response && response.ok) {
-          await this.db.removeFromOutbox(item.id);
-          this.onSyncSuccess(item);
-        } else {
-          totalSuccess = false;
-          this.onSyncError(item, new Error(`HTTP Error Status: ${response?.status ?? 'Unknown'}`));
+        if (activeClientInstance && activeClientInstance.config && activeClientInstance.config.auth) {
+          const auth = activeClientInstance.config.auth;
+          if (auth.type === 'basic' && auth.username != null) {
+            const encoded = btoa(`${auth.username}:${auth.password || ''}`);
+            nativeHeadersInstance.set('authorization', `Basic ${encoded}`);
+          }
+        }
+
+        const cleanUrl = cleanUrlPath(item.url);
+
+        const requestConfig = {
+          url: cleanUrl,
+          method: item.method,
+          body: item.body, 
+          headers: nativeHeadersInstance 
+        };
+
+        debugLog('REPLAY_REQUEST_DISPATCH', {
+          url: requestConfig.url,
+          method: requestConfig.method,
+          headers: toPlainHeaders(requestConfig.headers),
+          body: requestConfig.body
+        });
+
+        const rawResponse = await this.innerTransport.request(requestConfig);
+        const status = rawResponse.status ?? 200;
+        const ok = status >= 200 && status < 300;
+
+        debugLog('REPLAY_REQUEST_RESPONSE', { status, ok });
+
+        if (!ok) {
+          this.outbox.unshift(item, ...pendingItems.slice(pendingItems.indexOf(item) + 1));
+          return false;
         }
       } catch (err) {
-        totalSuccess = false;
-        this.onSyncError(item, err);
+        debugLog('REPLAY_FATAL_EXCEPTION', { error: err.message, stack: err.stack });
+        this.outbox.unshift(item, ...pendingItems.slice(pendingItems.indexOf(item) + 1));
+        return false;
       }
     }
 
-    return totalSuccess;
+    debugLog('SYNC_COMPLETE', { success: true });
+    return true;
   }
-
 }
 
