@@ -25,6 +25,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:live": "vitest run  --config=vitest.live.config.js test/live-server.spec.js --reporter=json",
     "test:watch": "vitest"
   },
   "peerDependencies": {

@@ -4,5 +4,7 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['test/**/*.test.js'],
+    fileParallelism: false,
   },
 });
+

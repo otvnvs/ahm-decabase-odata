@@ -1,0 +1,6 @@
+ID,SKU,Name,Category,Price,StockCount,IsDiscontinued
+a0e1b2c3-d4e5-4f6a-8b9c-0d1e2f3a4b5c,SKU-ROBOT-01,Industrial Welding Arm v4,Robotics,89500.00,12,false
+b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e,SKU-SENS-77X,High-Precision Proximity Laser,Sensors,245.50,150,false
+c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f,SKU-HEVR-M10,Heavy Duty Hydraulic Motor,Motors,3400.00,0,true
+d3e4f5a6-b7c8-4d9e-0f1a-2b3c4d5e6f7a,SKU-CONT-P01,Programmable Logic Controller,Controllers,1250.00,45,false
+

@@ -175,6 +175,20 @@ npm run dev
 
 To point the demo at a live OData service, swap the `MockTransport` in `example/src/App.vue` for `new FetchTransport()` and set a real `baseUrl`.
 
+
+## Testing
+
+Use `npm run test` or `npx vitest run` to run the tests. To run against SAP CAP Odata server, first run CAP server:
+
+```bash
+cd odata-server
+npm install
+cds deploy
+cds watch
+```
+
+After that, run `npm run test:live` or `npx vitest run test/live-server.test.js`
+
 ## Documentation
 
 - [Architecture](./docs/architecture.md) — layering, transport contract, protocol adapters, SAP CSRF/draft design.
